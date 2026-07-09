@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
-use crate::{config::RelayConfig, system::hostname};
+use crate::{config::RelayConfig, system::hostname, traffic::TrafficClassification};
 
 pub struct GatewayClient {
     config: Arc<RelayConfig>,
@@ -116,6 +116,8 @@ impl GatewayClient {
                     "source": "litellm-relay",
                     "runtime": "rust",
                     "app": capture.app,
+                    "traffic_kind": capture.classification.kind,
+                    "traffic_reason": capture.classification.reason,
                     "host": capture.host,
                     "method": capture.method,
                     "path": capture.path,
@@ -181,6 +183,7 @@ pub struct CaptureIngest {
     pub request_payload: Value,
     pub response_payload: Value,
     pub duration_ms: u64,
+    pub classification: TrafficClassification,
 }
 
 #[derive(Debug, Serialize)]

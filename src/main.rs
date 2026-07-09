@@ -11,6 +11,7 @@ mod proxy;
 mod setup;
 mod system;
 mod terminal;
+mod traffic;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

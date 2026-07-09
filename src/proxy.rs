@@ -24,6 +24,7 @@ use crate::{
     },
     pac::build_pac,
     terminal::{print_runtime_panel, print_trace_event},
+    traffic::{classify_captured_traffic, CapturedTraffic, TrafficClassification},
 };
 
 const DASHBOARD_INDEX_HTML: &str = include_str!("static/dashboard/index.html");
@@ -366,22 +367,6 @@ impl RelayProxy {
                     "headers": redact_headers(&request.headers),
                 }),
             );
-            self.log_event(json!({
-                "event_id": capture_event_id,
-                "connection_event_id": event_id,
-                "event": "http_request",
-                "method": request_line.method,
-                "path": request_line.path,
-                "host": host,
-                "app": classify_host(&host, &self.config),
-                "ai_match": is_ai_host(&host, &self.config),
-                "notion_match": is_notion_host(&host, &self.config),
-                "headers": redact_headers(&request.headers),
-                "request_bytes": request.body.len(),
-                "request_preview": request_payload.get("body_preview").cloned().unwrap_or(Value::String(String::new())),
-                "request_truncated": request_payload.get("preview_truncated").cloned().unwrap_or(Value::Bool(false)),
-            }))?;
-
             upstream_tls.write_all(&request.raw).await?;
             upstream_tls.flush().await?;
 
@@ -401,6 +386,34 @@ impl RelayProxy {
                     "headers": redact_headers(&response.headers),
                 }),
             );
+            let app = classify_host(&host, &self.config);
+            let classification = classify_captured_traffic(CapturedTraffic {
+                app: &app,
+                host: &host,
+                method: &request_line.method,
+                path: &request_line.path,
+                request_headers: &request.headers,
+                request_payload: &request_payload,
+                response_payload: &response_payload,
+            });
+            self.log_event(json!({
+                "event_id": capture_event_id,
+                "connection_event_id": event_id,
+                "event": "http_request",
+                "method": request_line.method,
+                "path": request_line.path,
+                "host": host,
+                "app": app,
+                "ai_match": is_ai_host(&host, &self.config),
+                "notion_match": is_notion_host(&host, &self.config),
+                "traffic_kind": classification.kind,
+                "traffic_reason": classification.reason,
+                "collector_eligible": classification.is_ai_request(),
+                "headers": redact_headers(&request.headers),
+                "request_bytes": request.body.len(),
+                "request_preview": request_payload.get("body_preview").cloned().unwrap_or(Value::String(String::new())),
+                "request_truncated": request_payload.get("preview_truncated").cloned().unwrap_or(Value::Bool(false)),
+            }))?;
             self.log_event(json!({
                 "event_id": capture_event_id,
                 "connection_event_id": event_id,
@@ -408,36 +421,49 @@ impl RelayProxy {
                 "method": request_line.method,
                 "path": request_line.path,
                 "host": host,
-                "app": classify_host(&host, &self.config),
+                "app": app,
+                "traffic_kind": classification.kind,
+                "traffic_reason": classification.reason,
+                "collector_eligible": classification.is_ai_request(),
                 "status_code": status_code,
                 "headers": redact_headers(&response.headers),
                 "response_bytes": response.body.len(),
                 "response_preview": response_payload.get("body_preview").cloned().unwrap_or(Value::String(String::new())),
                 "response_truncated": response_payload.get("preview_truncated").cloned().unwrap_or(Value::Bool(false)),
             }))?;
-
-            let ingest = self
-                .gateway
-                .ingest_capture(CaptureIngest {
-                    event_id: capture_event_id.clone(),
-                    host: host.clone(),
-                    app: classify_host(&host, &self.config),
-                    method: request_line.method.clone(),
-                    path: request_line.path.clone(),
-                    started_at: request_started_at,
-                    ended_at: Utc::now(),
-                    request_payload,
-                    response_payload,
-                    duration_ms: request_started.elapsed().as_millis() as u64,
-                })
-                .await;
-            self.log_collector_ingest(
-                &capture_event_id,
-                &event_id,
-                &host,
-                &request_line.path,
-                ingest,
-            )?;
+            if classification.is_ai_request() {
+                let ingest = self
+                    .gateway
+                    .ingest_capture(CaptureIngest {
+                        event_id: capture_event_id.clone(),
+                        host: host.clone(),
+                        app,
+                        method: request_line.method.clone(),
+                        path: request_line.path.clone(),
+                        started_at: request_started_at,
+                        ended_at: Utc::now(),
+                        request_payload,
+                        response_payload,
+                        duration_ms: request_started.elapsed().as_millis() as u64,
+                        classification,
+                    })
+                    .await;
+                self.log_collector_ingest(
+                    &capture_event_id,
+                    &event_id,
+                    &host,
+                    &request_line.path,
+                    ingest,
+                )?;
+            } else {
+                self.log_collector_skipped(
+                    &capture_event_id,
+                    &event_id,
+                    &host,
+                    &request_line.path,
+                    &classification,
+                )?;
+            }
 
             client_tls.write_all(&response.raw).await?;
             client_tls.flush().await?;
@@ -516,6 +542,26 @@ impl RelayProxy {
             "ok": ingest.ok,
             "status": ingest.status,
             "error": ingest.error,
+        }))
+    }
+
+    fn log_collector_skipped(
+        &self,
+        capture_event_id: &str,
+        connection_event_id: &str,
+        host: &str,
+        path: &str,
+        classification: &TrafficClassification,
+    ) -> Result<()> {
+        self.log_event(json!({
+            "event_id": capture_event_id,
+            "connection_event_id": connection_event_id,
+            "event": "collector_skipped",
+            "host": host,
+            "app": classify_host(host, &self.config),
+            "path": path,
+            "traffic_kind": classification.kind,
+            "traffic_reason": classification.reason,
         }))
     }
 
