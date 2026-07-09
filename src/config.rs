@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{env, fs, io, path::PathBuf};
 
 use crate::system::{env_bool, home_dir};
 
@@ -83,6 +83,33 @@ impl RelayConfig {
                 .unwrap_or_else(|_| relay_home.join("mitm")),
         }
     }
+}
+
+pub fn load_saved_env() -> io::Result<()> {
+    let env_path = relay_home().join("env");
+    if !env_path.exists() {
+        return Ok(());
+    }
+
+    for line in fs::read_to_string(env_path)?.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty() || env::var_os(key).is_some() {
+            continue;
+        }
+        env::set_var(key, value.trim());
+    }
+    Ok(())
+}
+
+pub fn relay_home() -> PathBuf {
+    home_dir().join(".litellm-relay")
 }
 
 pub fn normalize_host(host: &str) -> String {

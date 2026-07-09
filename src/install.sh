@@ -13,15 +13,16 @@ Usage:
   ./src/install.sh [--set-system-proxy "Wi-Fi"]
 
 Environment:
-  LITELLM_GATEWAY_URL              LiteLLM Gateway URL, default http://127.0.0.1:4000
-  LITELLM_GATEWAY_API_KEY          Gateway virtual key for Relay ingest/shadow calls
+  LITELLM_GATEWAY_URL              Optional default LiteLLM Gateway URL
+  LITELLM_GATEWAY_API_KEY          Optional non-interactive Gateway key fallback
   LITELLM_RELAY_SHADOW_ENABLED     Set to 1 to shadow Notion connection events
   LITELLM_RELAY_SHADOW_MODEL       Model for synthetic shadow calls, default gpt-4o-mini
   LITELLM_RELAY_CAPTURE_PAYLOADS   Capture request/response previews, default 1
 
-By default this builds the Rust Relay binary, starts a LaunchAgent, and trusts the
-Relay local CA in your login keychain so AI app payloads can be captured.
-Pass --set-system-proxy "Wi-Fi" to route Notion and other AI apps through Relay.
+By default this builds the Rust Relay binary, walks you through LiteLLM Gateway
+SSO, starts a LaunchAgent, and trusts the Relay local CA in your login keychain
+so AI app payloads can be captured. Pass --set-system-proxy "Wi-Fi" to route
+Notion and other AI apps through Relay.
 USAGE
 }
 
@@ -75,18 +76,15 @@ mkdir -p "$RELAY_HOME/bin"
 cp "$BUILD_DIR/target/release/litellm-relay" "$RELAY_HOME/bin/litellm-relay"
 chmod 700 "$RELAY_HOME/bin/litellm-relay"
 
-cat > "$RELAY_HOME/env" <<ENV
-LITELLM_RELAY_HOST=127.0.0.1
-LITELLM_RELAY_PORT=$RELAY_PORT
-LITELLM_RELAY_LOG_PATH=$RELAY_HOME/relay.log.jsonl
-LITELLM_GATEWAY_URL=${LITELLM_GATEWAY_URL:-http://127.0.0.1:4000}
-LITELLM_GATEWAY_API_KEY=${LITELLM_GATEWAY_API_KEY:-}
-LITELLM_RELAY_SHADOW_ENABLED=${LITELLM_RELAY_SHADOW_ENABLED:-0}
-LITELLM_RELAY_SHADOW_MODEL=${LITELLM_RELAY_SHADOW_MODEL:-gpt-4o-mini}
-LITELLM_RELAY_CAPTURE_PAYLOADS=${LITELLM_RELAY_CAPTURE_PAYLOADS:-1}
-LITELLM_RELAY_MITM_CA_DIR=$RELAY_HOME/mitm
-ENV
-chmod 600 "$RELAY_HOME/env"
+SETUP_ARGS=()
+if [[ -n "${LITELLM_GATEWAY_URL:-}" ]]; then
+  SETUP_ARGS+=(--gateway-url "$LITELLM_GATEWAY_URL")
+fi
+if [[ -n "${LITELLM_GATEWAY_API_KEY:-}" ]]; then
+  SETUP_ARGS+=(--api-key "$LITELLM_GATEWAY_API_KEY")
+fi
+
+"$RELAY_HOME/bin/litellm-relay" setup "${SETUP_ARGS[@]}"
 
 mkdir -p "$RELAY_HOME/bin"
 cat > "$RELAY_HOME/bin/run-relay" <<RUNNER
@@ -176,6 +174,5 @@ To route Notion through Relay for a manual pilot:
 To verify interception without changing system settings:
   curl --cacert "$CA_PATH" -x http://127.0.0.1:$RELAY_PORT https://www.notion.so
 
-To enable shadow calls through LiteLLM Gateway, set LITELLM_GATEWAY_API_KEY and
-LITELLM_RELAY_SHADOW_ENABLED=1 before running src/install.sh, then restart Relay.
+Gateway auth is saved in $RELAY_HOME/env.
 DONE

@@ -2,7 +2,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::{
-    cert::ensure_ca, config::RelayConfig, pac::build_pac, proxy::RelayProxy, setup::run_setup,
+    cert::ensure_ca,
+    config::{load_saved_env, RelayConfig},
+    pac::build_pac,
+    proxy::RelayProxy,
+    setup::run_setup,
 };
 
 #[derive(Parser)]
@@ -31,9 +35,28 @@ enum CommandKind {
 }
 
 pub async fn run() -> Result<()> {
+    load_saved_env()?;
     let cli = Cli::parse();
+    match cli.command {
+        None => run_interactive_default().await,
+        Some(command) => run_command(command).await,
+    }
+}
+
+async fn run_interactive_default() -> Result<()> {
+    let mut config = RelayConfig::from_env();
+    if config.gateway_api_key.is_none() {
+        println!("LiteLLM Relay is not set up yet.");
+        run_setup(None, None).await?;
+        load_saved_env()?;
+        config = RelayConfig::from_env();
+    }
+    RelayProxy::new(config).serve_forever().await
+}
+
+async fn run_command(command: CommandKind) -> Result<()> {
     let config = RelayConfig::from_env();
-    match cli.command.unwrap_or(CommandKind::Serve) {
+    match command {
         CommandKind::Serve => RelayProxy::new(config).serve_forever().await,
         CommandKind::Pac => {
             print!("{}", build_pac(&config));
@@ -47,6 +70,6 @@ pub async fn run() -> Result<()> {
         CommandKind::Setup {
             gateway_url,
             api_key,
-        } => run_setup(gateway_url, api_key),
+        } => run_setup(gateway_url, api_key).await,
     }
 }

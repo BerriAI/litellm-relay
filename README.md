@@ -25,23 +25,18 @@ truncated and headers are redacted. If a specific app uses certificate pinning,
 set `LITELLM_RELAY_CAPTURE_PAYLOADS=0` to fall back to metadata-only tunneling
 for that pilot.
 
-## CLI setup
+## Install
 
-Run setup first if you want Relay to send capture metadata to LiteLLM Gateway:
+Install is interactive, like a local agent CLI. It builds the Rust binary, asks
+for your LiteLLM Gateway URL, opens the Gateway SSO flow in the browser, waits
+for authorization, saves the Relay credential, then starts the local service.
 
-```bash
-cargo run -- setup --gateway-url "https://gateway.example.com"
+```text
+LiteLLM Gateway URL [http://127.0.0.1:4000]:
+Authentication method [sso]:
+Opening LiteLLM Gateway SSO in your browser.
+Waiting for Gateway authorization...
 ```
-
-The setup command opens the LiteLLM Gateway login/API-key page, asks you to paste
-a Relay Gateway key, and writes `~/.litellm-relay/env`. That key is then used for
-Relay ingest calls to `/internal/collector/events` and optional synthetic shadow
-calls.
-
-## Manual install
-
-The installer builds the Rust binary from source, writes a LaunchAgent, and
-trusts the local Relay CA in your login keychain:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/BerriAI/litellm-relay/main/src/install.sh | bash
@@ -54,11 +49,15 @@ curl -fsSL https://raw.githubusercontent.com/BerriAI/litellm-relay/main/src/inst
   | bash -s -- --set-system-proxy "Wi-Fi"
 ```
 
-Open the dashboard:
+Gateway auth is stored in `~/.litellm-relay/env` with owner-only permissions.
+Browser SSO is the default setup path. For headless or emergency installs, set
+`LITELLM_GATEWAY_API_KEY` before running the installer and Relay will use that
+key without opening SSO.
 
-```bash
-open http://127.0.0.1:4142/
-```
+After install, running `litellm-relay` directly uses the saved setup. If no
+Gateway auth is present yet, it starts the same interactive setup flow first.
+
+## Local Pilot
 
 Generate a test intercepted request:
 
@@ -72,17 +71,6 @@ Generate a Codex/OpenAI-style intercepted request:
 ```bash
 curl --cacert ~/.litellm-relay/mitm/litellm-relay-ca.pem \
   -x http://127.0.0.1:4142 https://api.openai.com/v1/models
-```
-
-To enable Gateway shadow calls:
-
-```bash
-export LITELLM_GATEWAY_URL="https://gateway.example.com"
-export LITELLM_GATEWAY_API_KEY="sk-..."
-export LITELLM_RELAY_SHADOW_ENABLED=1
-
-curl -fsSL https://raw.githubusercontent.com/BerriAI/litellm-relay/main/src/install.sh \
-  | bash -s -- --set-system-proxy "Wi-Fi"
 ```
 
 ## Local development
