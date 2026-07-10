@@ -1,6 +1,6 @@
 # LiteLLM Relay
 
-LiteLLM Relay is a proxy that you can install on all your employees machines to start tracking all AI Usage. Install LiteLLM Relay on all devices it detects AI Usage and routes it to LiteLLM AI Gateway. This enables LiteLLM AI Gateway to become your single pane of glass for all AI Usage in your company. 
+LiteLLM Relay is a proxy you install on employee machines. It detects AI traffic from tools like Notion AI, Perplexity, and OpenClaw, and routes it to your LiteLLM AI Gateway. This makes the Gateway a single pane of glass for all AI usage in your company (including shadow AI).
 
 ## Supported MDMs
 
