@@ -11,6 +11,12 @@ keychain + a per-user LaunchAgent). See [`scripts/build-macos-pkg.sh`](../script
 Recommended shape, same as other endpoint software: manual pilot on one Mac,
 then a small MDM pilot group, then broaden.
 
+## Demo
+
+Recorded walkthrough of the Microsoft Intune admin flow — creating and assigning
+the PAC configuration profile and the macOS PKG app-add wizard:
+[Intune rollout demo video](https://app.devin.ai/attachments/04fa814f-f780-45da-a771-d690a7df1710/intune-relay-rollout-edited.mp4).
+
 ## What gets deployed
 
 | Artifact | Purpose | Source |
