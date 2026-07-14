@@ -1,6 +1,10 @@
 # LiteLLM Relay
 
-LiteLLM Relay is a proxy you install on employee machines. It detects AI traffic from tools like Notion AI, Perplexity, and OpenClaw, and routes it to your LiteLLM AI Gateway. This makes the Gateway a single pane of glass for all AI usage in your company (including shadow AI).
+LiteLLM Relay is a proxy you install on employee machines. It does two things.
+
+First, it manages your AI coding tools. Relay installs and version-manages Claude Code and Codex across every laptop through your MDM, writes their settings, and lets developers sign in with their corporate identity through the LiteLLM AI Gateway, so nobody handles a provider API key.
+
+Second, it captures shadow AI. Relay detects AI traffic from tools like Notion AI, Perplexity, and OpenClaw and routes it to the Gateway, making it a single pane of glass for all AI usage in your company.
 
 <img width="2467" height="1080" alt="relay-hero" src="https://github.com/user-attachments/assets/e766224d-014b-4083-b03e-be11abfb0b4a" />
 
