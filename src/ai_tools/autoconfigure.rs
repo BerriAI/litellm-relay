@@ -5,6 +5,8 @@
 //! a separate onboard command per tool per machine.
 
 use anyhow::Result;
+use console::style;
+use url::Url;
 
 use crate::{
     ai_tools::{
@@ -100,12 +102,10 @@ fn autoconfigure_with(
     }
 
     println!(
-        "Detected {} AI tool(s) to route through the Gateway:",
-        detected.len()
+        "{} {}",
+        style("Auto-configuring AI tools →").bold(),
+        style(gateway_host()).cyan().bold()
     );
-    for Detection { tool, evidence } in &detected {
-        println!("  - {} ({evidence})", tool.label());
-    }
     println!();
 
     let results: Vec<Configured> = detected
@@ -116,27 +116,53 @@ fn autoconfigure_with(
         })
         .collect();
 
-    let failures: Vec<&Configured> = results
-        .iter()
-        .filter(|configured| configured.outcome.is_err())
-        .collect();
-    let configured = results.len() - failures.len();
-
-    println!();
-    println!(
-        "Auto-configured {configured} of {} detected tool(s).",
-        results.len()
-    );
-    for failure in &failures {
-        if let Err(error) = &failure.outcome {
-            eprintln!("  ! {} was not configured: {error:#}", failure.tool.label());
+    for configured in &results {
+        let label = style(configured.tool.label()).bold();
+        match &configured.outcome {
+            Ok(()) => println!("  {}  {label}", style("✓").green().bold()),
+            Err(error) => println!(
+                "  {}  {label} {} {}",
+                style("–").yellow().bold(),
+                style("—").dim(),
+                style(error).dim(),
+            ),
         }
     }
 
-    if !failures.is_empty() && configured == 0 {
+    let failures = results
+        .iter()
+        .filter(|configured| configured.outcome.is_err())
+        .count();
+    let configured = results.len() - failures;
+
+    println!();
+    let summary = format!(
+        "Configured {configured} of {} detected tools.",
+        results.len()
+    );
+    if failures == 0 {
+        println!("{}", style(summary).green().bold());
+    } else {
+        println!("{}", style(summary).yellow());
+    }
+
+    if failures > 0 && configured == 0 {
         anyhow::bail!("failed to configure any detected AI tool");
     }
     Ok(())
+}
+
+/// The Gateway host shown in the summary header. Loads the resolved settings and
+/// extracts the URL host, falling back to the raw URL when it can't be parsed.
+fn gateway_host() -> String {
+    let raw = match load_settings() {
+        Ok(settings) => settings.gateway.url,
+        Err(_) => return "the Gateway".to_string(),
+    };
+    Url::parse(&raw)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+        .unwrap_or(raw)
 }
 
 /// Dispatch a single detected tool to its onboarder, forwarding overrides.
@@ -147,6 +173,8 @@ fn configure_tool(tool: AiTool, params: &AutoConfigureParams) -> Result<()> {
             authorize_url: params.authorize_url.clone(),
             team: params.team.clone(),
             model: None,
+            api_key: params.api_key.clone(),
+            quiet: true,
         }),
         AiTool::Codex => onboard_codex(CodexOnboardParams {
             gateway_url: params.gateway_url.clone(),
@@ -155,6 +183,7 @@ fn configure_tool(tool: AiTool, params: &AutoConfigureParams) -> Result<()> {
             model: None,
             env_key: params.env_key.clone(),
             api_key: params.api_key.clone(),
+            quiet: true,
         }),
         AiTool::ClaudeDesktop => onboard_desktop(OnboardDesktopParams {
             gateway_url: params.gateway_url.clone(),
@@ -164,6 +193,7 @@ fn configure_tool(tool: AiTool, params: &AutoConfigureParams) -> Result<()> {
             oidc_issuer: params.oidc_issuer.clone(),
             oidc_scopes: params.oidc_scopes.clone(),
             oidc_redirect_port: params.oidc_redirect_port,
+            quiet: true,
         }),
     }
 }

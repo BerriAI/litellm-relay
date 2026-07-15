@@ -121,6 +121,10 @@ impl DetectContext {
 #[derive(Debug, Clone)]
 pub struct Detection {
     pub tool: AiTool,
+    /// Human-readable reason the tool was detected. Retained for diagnostics and
+    /// asserted in detection tests; the clean autoconfigure summary no longer
+    /// prints it, so it is otherwise unread in the binary.
+    #[allow(dead_code)]
     pub evidence: String,
 }
 

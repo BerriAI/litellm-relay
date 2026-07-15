@@ -77,6 +77,9 @@ enum CommandKind {
         team: Option<String>,
         #[arg(long)]
         model: Option<String>,
+        /// Static gateway key fallback for environments without an IdP.
+        #[arg(long)]
+        api_key: Option<String>,
     },
     /// Wire Claude Desktop (third-party mode) to route through the Gateway.
     ///
@@ -191,11 +194,14 @@ async fn run_command(command: CommandKind) -> Result<()> {
             authorize_url,
             team,
             model,
+            api_key,
         } => onboard(OnboardParams {
             gateway_url,
             authorize_url,
             team,
             model,
+            api_key,
+            quiet: false,
         }),
         CommandKind::OnboardClaudeDesktop {
             gateway_url,
@@ -213,6 +219,7 @@ async fn run_command(command: CommandKind) -> Result<()> {
             oidc_issuer,
             oidc_scopes,
             oidc_redirect_port,
+            quiet: false,
         }),
         CommandKind::ClaudeToken => print_token(),
         CommandKind::OnboardCodex {
@@ -229,6 +236,7 @@ async fn run_command(command: CommandKind) -> Result<()> {
             model,
             env_key,
             api_key,
+            quiet: false,
         }),
         CommandKind::CodexToken => print_codex_token(),
     }

@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
 use serde_json::{json, Map, Value};
 
 use crate::config::{load_settings, save_settings, RelaySettings};
@@ -23,6 +23,9 @@ pub struct OnboardDesktopParams {
     pub oidc_issuer: Option<String>,
     pub oidc_scopes: Option<String>,
     pub oidc_redirect_port: Option<u16>,
+    /// Suppress success output (used by autoconfigure, which prints its own
+    /// summary). Standalone `relay onboard-claude-desktop` leaves this false.
+    pub quiet: bool,
 }
 
 /// Writes `/etc/claude-desktop/managed-settings.json` so Claude Desktop routes
@@ -64,19 +67,21 @@ pub fn onboard_desktop(params: OnboardDesktopParams) -> Result<()> {
     let path = write_managed_settings(&document)?;
     save_settings(&settings)?;
 
-    println!("Claude Desktop is wired to {}", settings.gateway.url);
-    match &sso {
-        Some(sso) => {
-            println!(
-                "Sign-in: OIDC issuer {} (client {})",
-                sso.issuer, sso.client_id
-            );
-            println!("Developers click \"Sign in to your organization\" on first launch.");
+    if !params.quiet {
+        println!("Claude Desktop is wired to {}", settings.gateway.url);
+        match &sso {
+            Some(sso) => {
+                println!(
+                    "Sign-in: OIDC issuer {} (client {})",
+                    sso.issuer, sso.client_id
+                );
+                println!("Developers click \"Sign in to your organization\" on first launch.");
+            }
+            None => println!("Credential: static Gateway API key"),
         }
-        None => println!("Credential: static Gateway API key"),
+        println!("Wrote {}", path.display());
+        println!("Restart Claude Desktop to pick up the managed configuration.");
     }
-    println!("Wrote {}", path.display());
-    println!("Restart Claude Desktop to pick up the managed configuration.");
     Ok(())
 }
 
@@ -150,24 +155,25 @@ fn managed_settings_path() -> PathBuf {
 fn write_managed_settings(document: &Map<String, Value>) -> Result<PathBuf> {
     let path = managed_settings_path();
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create {} (Claude Desktop requires this managed directory to be \
-                 root-owned; re-run with sudo)",
-                parent.display()
-            )
-        })?;
+        fs::create_dir_all(parent).map_err(|error| managed_write_error(error, parent))?;
     }
 
     let serialized = serde_json::to_string_pretty(&Value::Object(document.clone()))?;
-    fs::write(&path, format!("{serialized}\n")).with_context(|| {
-        format!(
-            "failed to write {} (Claude Desktop only honors a root-owned managed file; re-run \
-             with sudo)",
-            path.display()
-        )
-    })?;
+    fs::write(&path, format!("{serialized}\n"))
+        .map_err(|error| managed_write_error(error, &path))?;
     Ok(path)
+}
+
+/// Maps a filesystem error on the managed `/etc/claude-desktop` path to a
+/// concise, actionable message. Permission errors get a short "needs sudo" hint
+/// (surfaced verbatim in the autoconfigure summary) instead of the raw
+/// "Permission denied (os error 13)".
+fn managed_write_error(error: std::io::Error, path: &std::path::Path) -> anyhow::Error {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        anyhow!("needs sudo (managed dir /etc/claude-desktop must be root-owned)")
+    } else {
+        anyhow::Error::new(error).context(format!("failed to write {}", path.display()))
+    }
 }
 
 #[cfg(test)]
