@@ -43,6 +43,17 @@ seeded by your MDM is enough to configure a device with no arguments. Pass
 Only detected tools are touched, and one tool failing never blocks the others.
 Pass `--skip-autoconfigure` to `install.sh` to disable it.
 
+## Developers see their own usage, locally
+
+Relay also ships an optional **macOS menu bar app** so each developer can see **their own AI spend right on their machine** — no dashboard login. It reads live, key-scoped usage from the Gateway and breaks it down per coding tool: spend this month, spend/day, model mix, cache-hit rate, and the relay key's budget.
+
+<p>
+  <img width="340" alt="Claude Code usage in the menu bar" src="docs/img/relaybar-claude-code.png" />
+  <img width="340" alt="Codex CLI usage in the menu bar" src="docs/img/relaybar-codex-cli.png" />
+</p>
+
+Each tool (Claude Code, Codex CLI, Cursor, Gemini, …) gets its own tab with its own color. Build it from [`macos/RelayBarGlass`](macos/RelayBarGlass) (`./build.sh && open RelayBarGlass.app`).
+
 ## AI Tool Guides
 
 Relay onboards each AI coding tool onto the LiteLLM AI Gateway with zero developer setup — the developer just launches the tool. Pick your tool for the step-by-step guide:
