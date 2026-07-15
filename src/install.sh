@@ -9,6 +9,8 @@ RELAY_ALLOW_UNPINNED_MAIN="${RELAY_ALLOW_UNPINNED_MAIN:-0}"
 RELAY_PREBUILT_BINARY="${RELAY_PREBUILT_BINARY:-}"
 RELAY_MANAGED_CONFIG="${RELAY_MANAGED_CONFIG:-}"
 RELAY_SKIP_SETUP="${RELAY_SKIP_SETUP:-0}"
+RELAY_AUTOCONFIGURE="${RELAY_AUTOCONFIGURE:-1}"
+RELAY_AUTOCONFIGURE_INTERVAL="${RELAY_AUTOCONFIGURE_INTERVAL:-3600}"
 RELAY_TRUST_CA="${RELAY_TRUST_CA:-1}"
 RELAY_PORT="4142"
 NETWORK_SERVICE=""
@@ -34,6 +36,8 @@ Options:
   --prebuilt-binary PATH          Install this prebuilt relay binary instead of building
   --config-file PATH              Seed ~/.litellm-relay/config.yaml from this managed file
   --skip-setup                    Skip the interactive gateway setup wizard (managed deploys)
+  --skip-autoconfigure            Do not auto-detect and wire installed AI tools to the Gateway
+                                  (also disables periodic re-detection of later installs)
   --skip-trust-ca                 Install without adding the Relay CA to login keychain
   --background                    Configure Gateway auth and start the LaunchAgent
   --set-system-proxy "Wi-Fi"      Route the named macOS network service through Relay
@@ -68,8 +72,23 @@ Environment:
   RELAY_PREBUILT_BINARY         Same as --prebuilt-binary
   RELAY_MANAGED_CONFIG          Same as --config-file
   RELAY_SKIP_SETUP=1            Same as --skip-setup
+  RELAY_AUTOCONFIGURE=0         Same as --skip-autoconfigure
+  RELAY_AUTOCONFIGURE_INTERVAL  Seconds between periodic re-detection (default 3600)
   RELAY_TRUST_CA=0              Same as --skip-trust-ca
 USAGE
+}
+
+autoconfigure_ai_tools() {
+  if [[ "$RELAY_AUTOCONFIGURE" != "1" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$RELAY_HOME/config.yaml" ]]; then
+    return 0
+  fi
+  echo "Auto-configuring installed AI tools to route through the Gateway..."
+  "$RELAY_HOME/bin/litellm-relay" autoconfigure || {
+    echo "warning: AI tool auto-configuration did not complete." >&2
+  }
 }
 
 require_value() {
@@ -116,6 +135,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-setup)
       SKIP_SETUP=1
+      shift
+      ;;
+    --autoconfigure)
+      RELAY_AUTOCONFIGURE=1
+      shift
+      ;;
+    --skip-autoconfigure)
+      RELAY_AUTOCONFIGURE=0
       shift
       ;;
     --background)
@@ -395,6 +422,7 @@ WARN
 fi
 
 if [[ "$BACKGROUND_SERVICE" != "1" ]]; then
+  autoconfigure_ai_tools
   cat <<DONE
 LiteLLM Relay installed.
 
@@ -430,6 +458,9 @@ warning: --skip-setup was set but $RELAY_HOME/config.yaml does not exist.
 Seed a managed config with --config-file so Relay can reach your Gateway.
 WARN
   fi
+  # `relay setup` runs auto-configuration itself; managed (skip-setup) deploys
+  # do not, so wire up detected AI tools here from the seeded config.
+  autoconfigure_ai_tools
 else
   SETUP_ARGS=()
   if [[ -n "$SETUP_GATEWAY_URL" ]]; then
@@ -484,6 +515,42 @@ PLIST
 launchctl bootout "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 launchctl enable "gui/$(id -u)/ai.litellm.relay"
+
+# Periodic auto-configuration: re-detect installed AI tools on an interval so a
+# tool installed after Relay (a new Claude Code / Codex / Claude Desktop) gets
+# wired to the Gateway automatically, with no re-run by the developer.
+AUTOCONFIGURE_PLIST="$HOME/Library/LaunchAgents/ai.litellm.relay.autoconfigure.plist"
+if [[ "$RELAY_AUTOCONFIGURE" == "1" ]]; then
+  cat > "$AUTOCONFIGURE_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.litellm.relay.autoconfigure</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$RELAY_HOME/bin/litellm-relay</string>
+    <string>autoconfigure</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>$RELAY_AUTOCONFIGURE_INTERVAL</integer>
+  <key>StandardOutPath</key>
+  <string>$RELAY_HOME/autoconfigure.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>$RELAY_HOME/autoconfigure.err.log</string>
+</dict>
+</plist>
+PLIST
+  launchctl bootout "gui/$(id -u)" "$AUTOCONFIGURE_PLIST" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$AUTOCONFIGURE_PLIST"
+  launchctl enable "gui/$(id -u)/ai.litellm.relay.autoconfigure"
+else
+  launchctl bootout "gui/$(id -u)" "$AUTOCONFIGURE_PLIST" >/dev/null 2>&1 || true
+  rm -f "$AUTOCONFIGURE_PLIST"
+fi
 
 if [[ -n "$NETWORK_SERVICE" ]]; then
   networksetup -setautoproxyurl "$NETWORK_SERVICE" "http://127.0.0.1:$RELAY_PORT/proxy.pac"
