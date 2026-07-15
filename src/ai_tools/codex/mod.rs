@@ -51,6 +51,9 @@ pub struct CodexOnboardParams {
     pub env_key: Option<String>,
     /// Static gateway key fallback for environments without an IdP.
     pub api_key: Option<String>,
+    /// Suppress success output (used by autoconfigure, which prints its own
+    /// summary). Standalone `relay onboard-codex` leaves this false.
+    pub quiet: bool,
 }
 
 /// Writes `~/.codex/config.toml` so `codex` sends requests to the Gateway
@@ -102,30 +105,32 @@ pub fn onboard(params: CodexOnboardParams) -> Result<()> {
     let config_path = write_codex_config(&settings, &credential, &exe)?;
     save_settings(&settings)?;
 
-    println!(
-        "Codex is wired to {} (provider `{}`, model `{}`)",
-        provider_base_url(&settings),
-        settings.codex.provider_id,
-        settings.codex.model
-    );
-    if let Some(team) = &settings.codex.team {
-        println!("Team header: x-litellm-team: {team}");
+    if !params.quiet {
+        println!(
+            "Codex is wired to {} (provider `{}`, model `{}`)",
+            provider_base_url(&settings),
+            settings.codex.provider_id,
+            settings.codex.model
+        );
+        if let Some(team) = &settings.codex.team {
+            println!("Team header: x-litellm-team: {team}");
+        }
+        match &credential {
+            Credential::TokenHelper => {
+                println!("Codex fetches a short-lived identity token via `relay codex-token`.");
+            }
+            Credential::EnvKey(var) => {
+                println!(
+                    "Codex reads the bearer key from ${var}. Populate it with the identity token, e.g.\n  export {var}=\"$({exe} codex-token)\""
+                );
+            }
+            Credential::StaticKey(_) => {
+                println!("Using a static gateway key from --api-key.");
+            }
+        }
+        println!("Wrote {}", config_path.display());
+        println!("Run `codex` and sign in through your browser on first use.");
     }
-    match &credential {
-        Credential::TokenHelper => {
-            println!("Codex fetches a short-lived identity token via `relay codex-token`.");
-        }
-        Credential::EnvKey(var) => {
-            println!(
-                "Codex reads the bearer key from ${var}. Populate it with the identity token, e.g.\n  export {var}=\"$({exe} codex-token)\""
-            );
-        }
-        Credential::StaticKey(_) => {
-            println!("Using a static gateway key from --api-key.");
-        }
-    }
-    println!("Wrote {}", config_path.display());
-    println!("Run `codex` and sign in through your browser on first use.");
     Ok(())
 }
 
