@@ -64,12 +64,23 @@ pub struct DetectContext {
 
 impl DetectContext {
     /// Build the context from the current process environment: the real home
-    /// directory, the entries of `PATH`, and the macOS application folders.
+    /// directory, the entries of `PATH`, and platform application folders.
     pub fn from_env() -> Self {
         let home = home_dir();
         let path_dirs = env::var_os("PATH")
             .map(|paths| env::split_paths(&paths).collect())
             .unwrap_or_default();
+        #[cfg(windows)]
+        let app_dirs = [
+            env::var_os("ProgramFiles").map(PathBuf::from),
+            env::var_os("ProgramFiles(x86)").map(PathBuf::from),
+            env::var_os("LOCALAPPDATA").map(PathBuf::from),
+            env::var_os("LOCALAPPDATA").map(|path| PathBuf::from(path).join("Programs")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        #[cfg(not(windows))]
         let app_dirs = vec![PathBuf::from("/Applications"), home.join("Applications")];
         Self {
             home,
@@ -140,13 +151,34 @@ pub fn detect(ctx: &DetectContext, tool: AiTool) -> Option<Detection> {
             .binary_on_path("claude")
             .map(|path| evidence_at("found `claude` at", &path))
             .or_else(|| ctx.dir(".claude").map(|path| evidence_at("found", &path))),
-        AiTool::ClaudeDesktop => ctx
-            .app_bundle("Claude.app")
-            .map(|path| evidence_at("found", &path))
-            .or_else(|| {
-                ctx.dir("Library/Application Support/Claude")
+        AiTool::ClaudeDesktop => {
+            if cfg!(windows) {
+                ctx.app_bundle("Claude")
+                    .or_else(|| ctx.app_bundle("AnthropicClaude"))
                     .map(|path| evidence_at("found", &path))
-            }),
+                    .or_else(|| {
+                        env::var_os("APPDATA")
+                            .map(PathBuf::from)
+                            .map(|path| path.join("Claude"))
+                            .filter(|path| path.exists())
+                            .map(|path| evidence_at("found", &path))
+                    })
+                    .or_else(|| {
+                        env::var_os("LOCALAPPDATA")
+                            .map(PathBuf::from)
+                            .map(|path| path.join("AnthropicClaude"))
+                            .filter(|path| path.exists())
+                            .map(|path| evidence_at("found", &path))
+                    })
+            } else {
+                ctx.app_bundle("Claude.app")
+                    .map(|path| evidence_at("found", &path))
+                    .or_else(|| {
+                        ctx.dir("Library/Application Support/Claude")
+                            .map(|path| evidence_at("found", &path))
+                    })
+            }
+        }
         AiTool::Codex => ctx
             .binary_on_path("codex")
             .map(|path| evidence_at("found `codex` at", &path))
@@ -236,7 +268,11 @@ mod tests {
         let bin_dir = home.join("bin");
         let apps_dir = home.join("Applications");
         fs::create_dir_all(&bin_dir).unwrap();
-        fs::create_dir_all(apps_dir.join("Claude.app")).unwrap();
+        #[cfg(windows)]
+        let claude_app = "Claude";
+        #[cfg(not(windows))]
+        let claude_app = "Claude.app";
+        fs::create_dir_all(apps_dir.join(claude_app)).unwrap();
         fs::write(bin_dir.join("codex"), b"#!/bin/sh\n").unwrap();
 
         let ctx = DetectContext {
@@ -247,6 +283,9 @@ mod tests {
 
         assert!(detect(&ctx, AiTool::Codex).is_some());
         let desktop = detect(&ctx, AiTool::ClaudeDesktop).expect("claude desktop detected");
+        #[cfg(windows)]
+        assert!(desktop.evidence.contains("Claude"));
+        #[cfg(not(windows))]
         assert!(desktop.evidence.contains("Claude.app"));
 
         let _ = fs::remove_dir_all(&home);

@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15]
+        os: [ubuntu-latest, macos-15, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
@@ -33,6 +33,26 @@ jobs:
         run: cargo test
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+      - name: Parse PowerShell deployment scripts
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $errors = @()
+          foreach ($path in @("scripts/windows/install.ps1", "scripts/windows/uninstall.ps1")) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $errors += $parseErrors
+            }
+          }
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.ToString() }
+            exit 1
+          }
+          if (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue) {
+            Invoke-ScriptAnalyzer -Path scripts/windows -Recurse -ErrorAction Continue
+          }
 
   shell:
     name: Installer shell checks

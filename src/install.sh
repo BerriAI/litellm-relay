@@ -193,7 +193,7 @@ if [[ "$RELAY_TRUST_CA" != "0" && "$RELAY_TRUST_CA" != "1" ]]; then
 fi
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "install.sh v0 currently supports macOS only." >&2
+  echo "install.sh v0 currently supports macOS only. Windows users should use scripts/windows/install.ps1; see docs/mdm-windows.md." >&2
   exit 1
 fi
 

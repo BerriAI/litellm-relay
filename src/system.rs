@@ -1,8 +1,12 @@
 use std::{env, path::PathBuf, process::Command};
 
 pub fn home_dir() -> PathBuf {
-    env::var("HOME")
-        .map(PathBuf::from)
+    #[cfg(windows)]
+    let home = env::var("USERPROFILE").or_else(|_| env::var("HOME"));
+    #[cfg(not(windows))]
+    let home = env::var("HOME");
+
+    home.map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
