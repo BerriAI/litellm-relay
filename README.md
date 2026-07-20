@@ -2,7 +2,7 @@
 
 LiteLLM Relay is a proxy you install on employee machines through your MDM. It does two things.
 
-First, it sets up your developers' AI tools for them. On install, Relay **auto-detects the AI tools already on the machine** — Claude Desktop, Claude Code, and Codex (CLI, VS Code, and the macOS app) — and wires each one to your LiteLLM AI Gateway automatically. There is no per-tool opt-in: if Relay recognizes a tool, it routes it through the Gateway. Developers just launch the tool and sign in with their corporate identity, with no provider API key and no manual setup. See [Auto-configuration](#auto-configuration) and the [AI Tool Guides](#ai-tool-guides) below.
+First, it sets up your developers' AI tools for them. On install, Relay **auto-detects the AI tools already on the machine** — Claude Desktop, Claude Code, and Codex (CLI, VS Code, and the macOS and Windows apps) — and wires each one to your LiteLLM AI Gateway automatically. There is no per-tool opt-in: if Relay recognizes a tool, it routes it through the Gateway. Developers just launch the tool and sign in with their corporate identity, with no provider API key and no manual setup. See [Auto-configuration](#auto-configuration) and the [AI Tool Guides](#ai-tool-guides) below.
 
 Second, it catches shadow AI. Relay detects AI traffic from tools like Notion AI, Perplexity, and OpenClaw and routes it to the Gateway too, making it a single pane of glass for all AI usage in your company.
 
@@ -24,7 +24,7 @@ Gateway in a single pass — you never enumerate tools per machine.
 | Tool | Detected by | Config Relay writes |
 | --- | --- | --- |
 | Claude Code CLI | `claude` on `PATH` or `~/.claude` | `~/.claude/settings.json` |
-| Claude Desktop | `/Applications/Claude.app` or its app-support dir | `/etc/claude-desktop/managed-settings.json` |
+| Claude Desktop | macOS `/Applications/Claude.app` or app-support dir; Windows Claude/AnthropicClaude install or `%APPDATA%\Claude` | macOS `/etc/claude-desktop/managed-settings.json`; Windows `%ProgramData%\ClaudeDesktop\managed-settings.json` |
 | Codex (CLI, VS Code, macOS app) | `codex` on `PATH`, `Codex.app`, the `openai.chatgpt` VS Code extension, or `~/.codex` | `~/.codex/config.toml` |
 
 Detection also runs on a schedule, so a tool installed *after* Relay gets wired
@@ -35,13 +35,13 @@ login and every `RELAY_AUTOCONFIGURE_INTERVAL` seconds, default 3600):
 | Job | Runs as | Tools | Why |
 | --- | --- | --- | --- |
 | `ai.litellm.relay.autoconfigure` (LaunchAgent) | you | Claude Code, Codex | configs are user-writable (`~/.claude`, `~/.codex`) |
-| `ai.litellm.relay.autoconfigure-desktop` (LaunchDaemon) | root | Claude Desktop | its managed file is the root-owned `/etc/claude-desktop/managed-settings.json` |
+| `ai.litellm.relay.autoconfigure-desktop` (LaunchDaemon) | root | Claude Desktop on macOS | its managed file is the root-owned `/etc/claude-desktop/managed-settings.json` |
 
-The root daemon pins `HOME` to the installing user so it reads that user's Relay
-config while running as root. Installing it needs root; `install.sh` uses `sudo`
-when not already root (the macOS `.pkg` postinstall already runs as root). If it
-can't get root, Claude Code and Codex still auto-configure and Relay prints a
-warning for Claude Desktop.
+On Windows, both serve and auto-configuration run as the installing user in
+Scheduled Tasks; there is no separate root task. On macOS, the root daemon pins
+`HOME` to the installing user so it reads that user's Relay config while running
+as root. Installing it needs root; `install.sh` uses `sudo` when not already
+root.
 
 You can still run detection on demand, and scope it with `--only`:
 
@@ -81,15 +81,15 @@ Relay onboards each AI coding tool onto the LiteLLM AI Gateway with zero develop
 Deploy LiteLLM Relay with your existing device-management process:
 
 - Jamf
-- Microsoft Intune
+- [Microsoft Intune (Windows)](docs/mdm-windows.md)
 - Kandji
 - Mosyle
 - VMware Workspace ONE
 - Addigy
 - Custom shell scripts or internal deployment workflows
 
-See the [MDM rollout guide](docs/mdm.md) for the deployable `.pkg`, the PAC
-configuration profile, and step-by-step Jamf and Intune runbooks.
+See the [macOS MDM rollout guide](docs/mdm.md) and the
+[Windows Intune rollout guide](docs/mdm-windows.md).
 
 ## Features
 
@@ -105,9 +105,11 @@ truncated and headers are redacted.
 
 ## Install
 
-Relay has no tagged release yet, so install it from GitHub. The installer
+Relay has no tagged release yet, so install it from GitHub. The macOS installer
 builds Relay from source, so you need [Rust](https://rustup.rs/) (`cargo`)
-installed first. Relay currently supports macOS.
+installed first. Windows deployments should use the prebuilt release binary and
+[`scripts/windows/install.ps1`](scripts/windows/install.ps1); macOS LaunchAgents
+become per-user Scheduled Tasks on Windows.
 
 Clone the repository and run the installer:
 

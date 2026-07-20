@@ -15,6 +15,35 @@ permissions:
   packages: write
 
 jobs:
+  package-windows:
+    name: Package Windows binary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build release binary
+        run: cargo build --release --locked
+      - name: Package artifact
+        env:
+          TAG_NAME: ${{ inputs.tag || github.ref_name }}
+        shell: pwsh
+        run: |
+          $name = "litellm-relay-$env:TAG_NAME-x86_64-pc-windows-msvc"
+          $staging = "dist\$name"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          Copy-Item target\release\litellm-relay.exe, scripts\windows\install.ps1, scripts\windows\uninstall.ps1, README.md, LICENSE $staging
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $archive = "dist\$name.zip"
+          Compress-Archive -Path $staging -DestinationPath $archive
+          $hash = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $archive -Leaf)" | Set-Content "$archive.sha256"
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: litellm-relay-x86_64-pc-windows-msvc
+          path: dist/*
+
   package-macos:
     name: Package macOS binary (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

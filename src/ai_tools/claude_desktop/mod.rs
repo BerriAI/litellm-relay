@@ -149,6 +149,13 @@ fn managed_settings_path() -> PathBuf {
     if let Ok(path) = env::var("CLAUDE_DESKTOP_MANAGED_SETTINGS") {
         return PathBuf::from(path);
     }
+    #[cfg(windows)]
+    {
+        return PathBuf::from(env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".into()))
+            .join("ClaudeDesktop")
+            .join("managed-settings.json");
+    }
+    #[cfg(not(windows))]
     PathBuf::from("/etc/claude-desktop/managed-settings.json")
 }
 
@@ -170,7 +177,7 @@ fn write_managed_settings(document: &Map<String, Value>) -> Result<PathBuf> {
 /// "Permission denied (os error 13)".
 fn managed_write_error(error: std::io::Error, path: &std::path::Path) -> anyhow::Error {
     if error.kind() == std::io::ErrorKind::PermissionDenied {
-        anyhow!("needs sudo (managed dir /etc/claude-desktop must be root-owned)")
+        anyhow!("needs administrator/root to write the managed settings directory")
     } else {
         anyhow::Error::new(error).context(format!("failed to write {}", path.display()))
     }
