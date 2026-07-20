@@ -268,7 +268,11 @@ mod tests {
         let bin_dir = home.join("bin");
         let apps_dir = home.join("Applications");
         fs::create_dir_all(&bin_dir).unwrap();
-        fs::create_dir_all(apps_dir.join("Claude.app")).unwrap();
+        #[cfg(windows)]
+        let claude_app = "Claude";
+        #[cfg(not(windows))]
+        let claude_app = "Claude.app";
+        fs::create_dir_all(apps_dir.join(claude_app)).unwrap();
         fs::write(bin_dir.join("codex"), b"#!/bin/sh\n").unwrap();
 
         let ctx = DetectContext {
@@ -279,6 +283,9 @@ mod tests {
 
         assert!(detect(&ctx, AiTool::Codex).is_some());
         let desktop = detect(&ctx, AiTool::ClaudeDesktop).expect("claude desktop detected");
+        #[cfg(windows)]
+        assert!(desktop.evidence.contains("Claude"));
+        #[cfg(not(windows))]
         assert!(desktop.evidence.contains("Claude.app"));
 
         let _ = fs::remove_dir_all(&home);
