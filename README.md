@@ -130,26 +130,17 @@ to install without trusting the CA.
 
 ### Homebrew
 
-Relay ships a Homebrew formula in [`Formula/litellm-relay.rb`](Formula/litellm-relay.rb).
-It builds Relay from source (so Homebrew installs Rust as a build dependency)
-and installs the `relay` and `litellm-relay` commands:
-
 ```bash
-brew install LiteLLM-Labs/litellm-relay/litellm-relay
+brew install relay
 ```
 
-Until this repository is published as a Homebrew tap, install straight from the
-formula file:
-
-```bash
-git clone https://github.com/LiteLLM-Labs/litellm-relay.git
-brew install --formula ./litellm-relay/Formula/litellm-relay.rb
-```
+The [`Formula/relay.rb`](Formula/relay.rb) formula builds Relay from source (so
+Homebrew installs Rust as a build dependency) and installs the `relay` command.
 
 Unlike `install.sh`, Homebrew installs only the binary — it does **not** trust
 the Relay CA, start the background service, or change your system proxy. Run
 `relay` to finish setup, and see the caveats printed after install (or
-`brew info litellm-relay`) for the CA-trust command.
+`brew info relay`) for the CA-trust command.
 
 Then open a new terminal and run:
 

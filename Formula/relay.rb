@@ -1,4 +1,4 @@
-class LitellmRelay < Formula
+class Relay < Formula
   desc "Local relay for routing and auditing AI app traffic through LiteLLM Gateway"
   homepage "https://github.com/LiteLLM-Labs/litellm-relay"
   # Relay has no tagged release yet, so the stable spec pins a specific commit
